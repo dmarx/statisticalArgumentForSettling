@@ -1,0 +1,410 @@
+---
+title: "A Statistical Argument For Settling: a foray into extreme value theory"
+author: "David Marx"
+date: "October 10, 2015"
+output: html_document
+---
+
+# High Standards
+
+The other day I found a post in an online relationship forum that got me thinking. The author of the post had stumbled across a text conversation between his fiancee and one of her girlfriends he wasn't meant to see in which she belittled his sexual performance and talked up her ex. The author of the post was reasonably distressed, but more than feeling disrespected, he insisted that it was extremely important to him to know that he was the best lover she'd ever had. 
+
+Now personally, I don't think that's a fair standard, and I started thinking about how I could construct a statistical argument to demonstrate this. 
+
+# Formalizing the question
+
+Someone has had m sexual partners. Assume it is possible to attribute some kind of rating to each partners sexual ability, such that we can rank partners relative to this rating and clearly identify the best sexual partner thus far observed. If things don't work out, what is the expected number of new partners needed to be ...observed before the previous "high score" is met or surpassed?
+
+We can easily generalize this problem further by restating it mathematically. 
+
+*WARNING: Mathematical notation ahead! Anything you don't understand, just skip. I really am just being as precise as possible. Even if my notation is confusing or unfamiliar to you, the strategy and results should still make sense, even if you don't have a background in probability.*
+
+1. Let $X \sim f(x;\theta)$ with pdf $F(x;\theta)$
+2. Consider an i.i.d. sample of size $n$ drawn from $X$, $\{X_1, X_2, \ldots X_n \}$
+3. Let $m = X_{(n)} = \mathop{\max} (X_1, X_2, \ldots X_n)$
+
+We are interested in finding the expected wait time until we observe a value greater than the previously observed max, *given the number of samples we've already observed*. Concretely:
+
+Find the quantity $E[j|i]$ such that $p(j|i) = p(X_{i+j} \ge X_{(i)} )$
+
+For simplicity, let's assume that we know the concrete value taken by the max (rather than just which observation takes the max value). I'd assert that this isn't really the case in the "best sex partner" question, where we really just have a rank ordering of partners and not a score. Anyway, let's start with this formulation of the problem: we are interested in finding the exected wait time until we observe a value greater than the previously observed max value, *given a concrete score associated with each observation*.
+
+Find the quantity $E[j|m]$ such that $p(j|m) = p(X_{i+j} \ge X_{(i)}| m=X_{(i)} \& X_{i+1, \dots i+j-1} \lt X_{(i)})$
+
+# The Geometric Distribution
+
+If think of the event of finding a new max value as a "success", then we're trying to model the number of observations, $j$, until the first success after a series of failures. In other words, we need the geometric distribution, which has pdf:
+
+$$dgeom(j,p) = p(1-p)^{j-1}$$
+
+where $p$ is the probability of success. This PDF should make a lot of sense intuitively. If $p$ is the success probability, then $1-p$ is the failure probability. We want to know the probability that after $j$ observations, we've had $j-1$ failures and one success. Assuming successes and failures are independent events, we can calculate the joint probability by taking the products of the probabilities of each indpendent event, giving us the geometric PDF described above. 
+
+Since we defined a "success" as achieving a score greater than or equal to the $m$, we can extract this probability from the right tail of the pdf, i.e. the complement of the CDF: $p=1-F(m)$
+
+```{r, echo=FALSE}
+xv = seq(-4, 4, .01)
+yv = dnorm(xv)
+m = 1.5
+i=which.max(xv==m)
+j=length(xv)
+yshift=.1*max(yv)
+plot(xv, yv, type='l', xlab="", ylab="", axes=0, ylim=c(-yshift, max(yv)), main="Right tail of PDF = p(x>m)")
+polygon(x=c(xv[i], xv[i:j], xv[j]), y= c(0, yv[i:j], 0), col="gray")
+#abline(v=m, lty=2)
+lines(c(m,m), c(-yshift*.5,max(yv)), lty=2)
+#text(m+.5, dnorm(m), 'm')
+text(m, -yshift, 'm')
+```
+
+# Deriving the expectation of the geometric distribution 
+
+The expectation of the geometric distribution is $\frac{1}{p}$. You can look this up on wikipedia or any math/stats textbook, but just for fun I'm going to derive this expectation here. You can just skip the rest of this section if you're not interested in this derivation.
+
+Let $p(j) = p(1-p)^{j-1}$. 
+
+Let $q=1-p$ such that $p(j) = (1-q)q^{j-1}$
+
+$$
+\begin{align}
+E[j] &= \sum_{i=1}^{\infty} i (1-q) q^{i-1} \\
+     &= \sum_{i=1}^{\infty} i (q^{i-1} - q^i) \\
+     &= \sum_{i=1}^{\infty} i q^{i-1} - \sum_{i=1}^{\infty} iq^i \\
+     &= \frac{1}{q}\sum_{i=1}^{\infty} i q^i - \sum_{i=1}^{\infty} iq^i \\
+     &= \left(\frac{1}{q} - 1\right) \sum_{i=1}^{\infty} iq^i \\
+     &= \left(\frac{1}{q} - 1\right) \left( \frac{q}{(1-q)^2} \right) \\
+     &= \frac{1}{(1-q)^2} - \frac{q}{(1-q)^2} \\
+     &= \frac{1-q}{(1-q)^2} \\
+     &= \frac{1}{1-q} \\
+     &= \frac{1}{p}
+\end{align}
+$$
+
+
+See? That wasn't so bad. Like I said, $E[j]=\frac{1}{p}$.
+
+Back to the problem.
+
+# Expected time to next max value
+
+By translating the problem representation into a geometric random variable, we can infer that $p(j|m)=\frac{1}{1-F(m)}$. This should actually make a lot of sense intuitively. Recall the frequentist interpretation of probability:
+
+$$P(x) \approx \frac{count(\text{# of events})}{count(\text{# of trials})}$$
+
+Let's imagine that for some collection of $n$ samples with $X_{(n)}=m$, $F(m)=\frac{1}{t}$. The frequentist interpretation of probability essentially asserts that our observed max $m$ is a $1$ in $t$ observation, and so it'll probably take another $t$ observations before we see another observation at least as large. 
+
+We've come a long way, but we still have the problem that we don't actually know $m$, and if we did we don't really have access to the CDF. We could construct some sort of measure and try to fit a CDF experimentally, but we can get pretty far analytically.
+
+The missing piece to our solution is an estimator for $m$ given the number of samples we've observed. But, if you think about it, we don't really even need this: what we *really* need, is an estimator for $p$. For this, we can just fall back on the frequentist interpretation of probability. Empirically, the max observation in a sample of $n$ observations is a $1$ in $n$ observation, so our empirical estimate of seeing a value at least as large (its CDF complement) is therefore just $\frac{1}{n}$. 
+
+This leaves us with the very simple heuristic that $E[j|i] = i$
+
+# How much longer must I wait?
+
+Having gotten this far, what then is the progression of the observation number on which we expect to meet new max values? Let's investigate this experimentally :
+
+Let $i$ denote the total number of observations thus far and $k$ denote the index of the expected next max observation. Then:
+
+* First max: $i=1, k=2$
+* Second max: $i=2, k=4$
+* Third max: $i=4, k=8$
+* Fourth max: $i=8, k=16 \ldots$
+
+This sequence is $a_i = 2^i$. In other words, this quantity exhibits exponential growth, which means it grows very, very quickly.
+
+```{r, echo=FALSE}
+xv=0:5
+plot(1+xv, 2^xv, 
+     xlab="Expected # new max values observed", 
+     ylab="Size of sample", main="Exponential growth of expected index\nof new max given size of current sample")
+```
+
+Back to the original problem: if someone were to constrain their marriage options to people that are the best sex partners they have to that point experienced, then if they've slept with 30 people, they've only met approximately 6 candidates for marriage-viable relationships.
+
+Like I said: exponential growth is bad.
+
+# Simulation
+
+I've cheated a bit by assuming that each new max value comes exactly when it's expected. This is a stochastic problem and I've treated it like it's discrete. Let's run some simulations to sanity check our results (and also because simulation is fun).
+
+
+```{r}
+max_val_sim = function(fx, k=1e4){
+  x_max = 0 #fx(1)
+  # Preallocate storage
+  vals = c(0, rep(NA_real_, k))
+  arrival = c(0, rep(NA_integer_, k))
+  j=1 # This will index into storage vectors
+  X = fx(k)
+  for(i in 1:k){
+    x_new = X[i] 
+    if(x_new>x_max){
+      j = j + 1
+      x_max = x_new
+      vals[j] = x_max
+      arrival[j] = i
+    }
+  }
+  list(values=vals[1:j], time=arrival[1:j])
+}
+
+max_val_monte_carlo = function(fx=rnorm, # generating distibution
+                               reps=2e3, # Number of repeated resample simulations
+                               samples=5e4, # Samples drawn during a given simulation
+                               est_extreme_per_run = 20 # estimate of number of extreme values hit per simulation. Performance parameter. Can basically be any arbitrary value.
+){
+  est_total = est_extreme_per_run*reps # for vector pre-allocation
+  indices           = rep(NA_integer_, est_total)
+  values            = rep(NA_integer_, est_total)
+  arrival_time      = rep(NA_integer_, est_total)
+  pre_arrival_wait  = rep(NA_integer_, est_total)
+  next_arrival_wait = rep(NA_integer_, est_total) # this will end up being 1 shorter than other storage vectors
+  j=0 # to index into storage vectors
+  for(i in 1:reps){
+    sim = max_val_sim(fx, k=samples)
+    m = length(sim$time)
+    # Calculate pre-arrival wait (time since last max observed)
+    sim_paw = c(sim$time[1], sim$time[2:m]-sim$time[1:(m-1)])
+    # Calculate wait to next... This is basically the same as above, just shifted. Probably redundant to even store this.
+    sim_naw = c(sim_paw[2:m], NA)
+    
+    while(j+m > length(arrival_time)){
+      print("growing storage vectors...")
+      indices           = c(indices,          rep(NA_integer_, est_total))
+      values            = c(values,           rep(NA_integer_, est_total))
+      arrival_time      = c(arrival_time,     rep(NA_integer_, est_total))
+      pre_arrival_wait  = c(pre_arrival_wait, rep(NA_integer_, est_total))
+      next_arrival_wait = c(                  rep(NA_integer_, est_total))
+    }
+    
+    # Store outcome of simulation iteration
+    j=j+1
+    j2=j+m-1
+    indices[j:j2]            = seq_along(sim$values)
+    values[j:j2]             = sim$values
+    arrival_time[j:j2]       = sim$time
+    pre_arrival_wait[j:j2]   = sim_paw
+    next_arrival_wait[j:j2]  = sim_naw
+    j=j2
+  }
+  # Flush NAs
+  arrival_time = arrival_time[!is.na(arrival_time)]
+  m = length(arrival_time)
+  indices           = indices[1:m] 
+  values            = values[1:m] 
+  pre_arrival_wait  = pre_arrival_wait[1:m]
+  next_arrival_wait = next_arrival_wait[1:m]
+  
+  # Return
+  list(values=values, arrival_time=arrival_time, pre_arrival_wait=pre_arrival_wait, next_arrival_wait=next_arrival_wait, index=indices)
+}
+
+expected_wait_time = function(x, cdf=pnorm){
+  (1-cdf(x))^-1
+}
+```
+
+```{r}
+set.seed(123)
+system.time(test <- max_val_monte_carlo(reps=1e2)) # 100reps->5s, 1e3->50s
+```
+
+```{r}
+plot(test$values, log(test$next_arrival_wait), col=(1+floor(log10(test$arrival_time))))
+
+xv = seq(0,4,.001)
+plot(test$values, test$next_arrival_wait)
+lines(xv, expected_wait_time(xv), lty=2, col='blue')
+
+plot(test$values, log(test$next_arrival_wait))
+lines(xv, log(expected_wait_time(xv)), lty=2, col='blue')
+
+# 2^n isn't a bad estimate, but it appears to actually grow *faster* than this. Let's improve
+# on this estimate later.
+xv = 1:20
+plot(test$index[1:length(test$values)], log(test$arrival_time))
+lines(xv, log(2^(xv)), col="blue")
+lines(xv, log(2^(xv-1)), col="red")
+lines(xv, log(xv*2^(xv)), col="green")
+```
+
+# Re-evaluating the growth rate
+
+From our simulations, it looks like $2^n$ is a reasonably good heuristic for small sample sizes, but the number of samples needed to achieve new max values for large samples seems to grow even faster than this, at least under the normality assumption we used in the simulation.
+
+To improve our estimate, we need to examine the distribution of the max of a given sample. Following the notation defined earlier: $p(x=X_{(n)}) = p(x\ge X_1, x\ge X_2, \ldots x\ge X_n) = F(x)^n$. This distribution is closely related to the Gumbel distribution, which is widely used in extreme value theory: http://stats.stackexchange.com/questions/105745/extreme-value-theory-show-normal-to-gumbel
+
+I don't really have experience with extreme value theory, so I'm probably doing this the hard way. Here we go!
+
+Given max(X,n) has CDF F(x)^n, PDF = d/dx CDF = n * F(X)^(n-1) * f(x)
+
+$$
+\begin{align}
+  E[x|n] &= \int x pdf dx
+  E[x|n] &= \int x *  n * F(X)^(n-1) * f(x)
+\end{align}
+$$
+
+Aaaaand it looks like we're at an impasse here. I tried plugging this into Wolfram Alphaand no beans, and unfortunately I don't think I'm talented enough with calculus to turn this into something meaningful, even with the additional constrant of the normality assumption.
+
+In fact, this integral doesn't just *look* difficult: according to wolfram.com, even if we adopt the normality assumption, closed form solutions are only known up to $n=5$. 
+
+Although an analytic solution isn't readily available, we can still use numerical methods to approximate this integral at different values of n to get a numerical estimate for this expectation, and then maybe fit a curve to the result to get an approximation to the analytic solution as a function of n. Although it'll just be an approximation, it may still be very informative of the behavior of this expectation. In particular, I'm interested to see how quickly this grows, since 2^n fails for large n.
+
+## Method 1. Lazy monte carlo simulation of mean, using tools we already built
+
+We can leverage the simulations we've already performed to get an estimate: for a given observed max we can attribute this value to samples of increasing size up to the appearance
+of the next new max value.
+
+## Method 2. True monte carlo simulation of mean
+
+The method above is a bit biased though because we aren't actually generating new samples. To really do this right, we need to draw a new sample of size $n$ each time and evaluate the max value for that sample. Otherwise we're just loading up our data with autocorrelation and bias.
+
+```{r}
+max_sim_given_n = function(n, reps, fx=rnorm, values=FALSE, mu=TRUE, sigma=TRUE){
+  #vals = rep(NA_real_, reps)
+  #for(i in 1:reps){
+  #  x = fx(n)
+  #  m = max(x)
+  #}
+  replicate(reps, max(fx(n)))
+}
+```
+
+Let's visualize this distribution for a few values of $n$ just to see how it behaves.
+
+```{r}
+plot(0,0, 
+     type='n', 
+     xlim=c(0,5), 
+     ylim=c(0,2), 
+     xlab='x',
+     ylab='p(x=X_(n))', 
+     main="Distribution of max(X_(n))\nfor increasing values of n"
+     )
+sapply(1:4,function(x) lines(density(max_sim_given_n(10^x, 5e3)), col=x))
+legend('topleft', paste("n=10^", 1:4), lty=1, col=1:4  )
+```
+
+```{r}
+#totx=2e3, reps=2e2 -> 85.63 seconds
+#totx=1e3, reps=2e2 -> 15.29 seconds
+#totx=1e3, resp=1e2 ->  7.8 seconds
+#totx=1e2, reps=1e2 ->  0.14 seconds
+totx = 2e3 
+xv = 1:totx
+system.time(CI <- sapply(xv, function(x) quantile(max_sim_given_n(x, 2e2), c(.025, .5, .975))))
+plot(0,0, type='n', xlab='log(n)', ylab='E[X_(n)]', xlim=c(0,max(log(xv))), ylim=c(0,max(CI)))
+lines(log(xv), CI[2,])
+lines(log(xv), CI[1,], col='red', lty=2)
+lines(log(xv), CI[3,], col='red', lty=2)
+```
+
+Interestingly, the magnitude of the confidence interval appears to converge to around $1.35$ .
+
+```{r}
+plot(xv, CI[3,]-CI[1,], main="Width of 95% CI for different")
+(inter_ci = mean(CI[3,floor(.75*totx):totx]-CI[1,floor(.75*totx):totx]))
+abline(h = inter_ci, col='blue', lty=2)
+```
+
+
+```{r}
+plot(log(xv), CI[3,]-CI[1,])
+```
+
+
+With this estimate (and confidence bounds) on hand, we can now plug this back into our analytic estimate for $E[j|m]$ to get confident bounds on $E[j|i]$ under the normality assumption:
+
+```{r}
+j_est = 1/(1-pnorm(CI))
+plot(xv,j_est[2,], type='l',
+     xlab="i", 
+     ylab='E[j|i]')
+
+plot(0,0, 
+     type='n', 
+     xlim=c(0,max(xv)),
+     ylim=c(0,max(j_est)),
+     xlab="i", 
+     ylab='E[j|i]')
+lines(xv, j_est[1,], lty=2, col='red')
+lines(xv, j_est[2,])
+lines(xv, j_est[3,], lty=2, col='red')
+
+# Upper bound of CI grows rapidly
+plot(0,0, 
+     type='n', 
+     xlim=c(0,max(xv)),
+     #xlim=c(0,100), 
+     ylim=c(0,max(j_est[,1:100])),
+     xlab="i", 
+     ylab='j')
+lines(xv, j_est[1,], lty=2, col='red')
+lines(xv, j_est[2,])
+lines(xv, j_est[3,], lty=2, col='red')
+
+# The observed convergence in log space is presumably to the standard gumbel distribution
+log_j_est = log(1/(1-pnorm(CI)))
+plot(0,0, type='n', xlim=c(0,max(xv)), ylim=c(0,max(log_j_est)), xlab="i", ylab='log(j)')
+lines(xv, log_j_est[1,], lty=2, col='red')
+lines(xv, log_j_est[2,])
+lines(xv, log_j_est[3,], lty=2, col='red')
+
+
+```
+
+## Method 3. monte carlo integration of the expectation 
+
+Method 2 should be completely sufficient, but just for fun since we have that integral, it'll be interesting to numerically approximate the integral itself. Frankly, I think this will actually produce better estimates than either of the above solutions (which is the main reason I'm doing this) but we won't know for sure until after experimentation (because I'm too lazy to  get out pen and paper and estimate the magnitude of my estimated error for these different approaches).
+
+Although this method will probably give us more accurate values for the expectation, we will *not* have confidence bounds for the statistic anymore, which, as we learned above, is extremely important to understanding the behavior of this statistic when $n$ is large.
+
+...Honestly, I may just skip this method. Or fuck it, I'll just do it cause why not. 
+
+```{r}
+# I could just use the built in numerical integration function, but what's the fun in that?
+mc_int = function(fx, xrange=c(0,1), ymax=NA, iters=1e6, trace=FALSE){
+  xmin = min(xrange); xmax = max(xrange); ymin = 0
+  if(is.na(ymax)){
+    xv = seq(xmin, xmax, length.out=1e4)
+    yrange = fx(xv)
+    ymax = max(yrange)*1.25
+  } 
+  Ux = runif(iters, xmin, xmax)
+  Uy = runif(iters, ymin, ymax)
+  Y  = fx(Ux)
+  test =  Uy < Y
+  A = (xmax-xmin) * (ymax-ymin)
+  outv = list(estimate = mean(test)*A)
+  if(trace) outv$trace = cumsum(test)*A/seq_along(test)
+  outv
+}
+```
+
+```{r}
+# MC Integration demo using identity function
+plot(mc_int(function(x) 1, ymax=4, trace=TRUE, iters=1e3)$trace, type='l')
+```
+
+With this tool built, now we need to translate the expectation integral as a function, and then we can just run it for different values of $n$.
+
+```{r}
+# x *  n * F(X)^(n-1) * f(x)
+exp_integral = function(x, n){
+  x * n * pnorm(x)^(n-1) * dnorm(x)
+}
+
+# 7s for 1e3 and 5e3
+system.time(
+  test <- sapply(1:1e3, function(n) 
+    mc_int(function(x) exp_integral(x,n), xrange=c(-5,5), iters=5e3)$estimate
+    )
+)
+
+plot(test, type='l')
+plot(log(seq_along(test)), test, type='l')
+```
+
+# The secretary problem
+
+...
