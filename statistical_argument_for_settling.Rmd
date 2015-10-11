@@ -41,7 +41,7 @@ where $p$ is the probability of success. This PDF should make a lot of sense int
 
 Since we defined a "success" as achieving a score greater than or equal to the $m$, we can extract this probability from the right tail of the pdf, i.e. the complement of the CDF: $p=1-F(m)$
 
-```{r, echo=FALSE}
+```{r plot_norm_pdf_tail, echo=FALSE}
 xv = seq(-4, 4, .01)
 yv = dnorm(xv)
 m = 1.5
@@ -98,6 +98,8 @@ The missing piece to our solution is an estimator for $m$ given the number of sa
 
 This leaves us with the very simple heuristic that $E[j|i] = i$
 
+... except this isn't entirely accurate, as we'll learn in a moment.
+
 # How much longer must I wait?
 
 Having gotten this far, what then is the progression of the observation number on which we expect to meet new max values? Let's investigate this experimentally :
@@ -111,7 +113,7 @@ Let $i$ denote the total number of observations thus far and $k$ denote the inde
 
 This sequence is $a_i = 2^i$. In other words, this quantity exhibits exponential growth, which means it grows very, very quickly.
 
-```{r, echo=FALSE}
+```{r plot_2n, echo=FALSE}
 xv=0:5
 plot(1+xv, 2^xv, 
      xlab="Expected # new max values observed", 
@@ -126,8 +128,15 @@ Like I said: exponential growth is bad.
 
 I've cheated a bit by assuming that each new max value comes exactly when it's expected. This is a stochastic problem and I've treated it like it's discrete. Let's run some simulations to sanity check our results (and also because simulation is fun).
 
+## Normality assumption
 
-```{r}
+For the purposes of this problem, I'm going to constrain my attention to the standard normal distribution for the rest of this analysis. This is a pretty big assumption, but I don't think it's completely unreasonable relative to the problem. If there were some way to objectively measure sexual performance, I think it wouldn't be at all surprising if a random sample of people's measures exhibited normality. I am *definitely* ignoring the potential effect of variance on the behavior of the max statistic by specifically assuming the *standard* normal, but maybe I'll investigate the effect of variance more later.
+
+## Building the simulation
+
+To begin with, let's define a function that, for some generating distribution, will generate random samples sequentially and track the value and arrival of new max values as they occur in the sample.
+
+```{r def_main_sim_funcs}
 max_val_sim = function(fx, k=1e4){
   x_max = 0 #fx(1)
   # Preallocate storage
@@ -146,7 +155,11 @@ max_val_sim = function(fx, k=1e4){
   }
   list(values=vals[1:j], time=arrival[1:j])
 }
+```
 
+Now let's wrap this function in another function that will run it repeatedly and return the collected results of all the individual simulations. I don't actually know how many values will be returned by a given simulation, so I'll have to be a little creative with how I capture the results of each experiment.
+
+```{r}
 max_val_monte_carlo = function(fx=rnorm, # generating distibution
                                reps=2e3, # Number of repeated resample simulations
                                samples=5e4, # Samples drawn during a given simulation
@@ -197,29 +210,81 @@ max_val_monte_carlo = function(fx=rnorm, # generating distibution
   # Return
   list(values=values, arrival_time=arrival_time, pre_arrival_wait=pre_arrival_wait, next_arrival_wait=next_arrival_wait, index=indices)
 }
-
-expected_wait_time = function(x, cdf=pnorm){
-  (1-cdf(x))^-1
-}
 ```
 
-```{r}
+With all the pieces in place, let's run the simulation.
+
+```{r mc_maxval}
 set.seed(123)
 system.time(test <- max_val_monte_carlo(reps=1e2)) # 100reps->5s, 1e3->50s
 ```
 
-```{r}
-plot(test$values, log(test$next_arrival_wait), col=(1+floor(log10(test$arrival_time))))
+Let's start by looking at $E[j|m]$. The following plot is colored based on the log(i) to roughly demonstrate the relationship between E[j|i] and $m$. 
 
+```{r plot_mc_maxval}
+plot(test$values, test$next_arrival_wait, 
+     col=(1+floor(log10(test$arrival_time))),
+     xlab="m",
+     ylab="j|m"
+     )
+```
+
+That's pretty tough to read, but the relationship becomes clearer if we instead visualize the log of $j|m$.
+
+```{r}
+plot(test$values, log(test$next_arrival_wait), 
+     col=(1+floor(log10(test$arrival_time))),
+     xlab="m",
+     ylab="log(j|m)"
+     )
+```
+
+The slight curvature the plot exhibits means that it's actually growing *faster* than exponentially.
+
+To sanity check $E[j|m]=\frac{1}{1-F(m)}$, let's plot it against the simulation results.
+
+```{r plot_mc_maxval_exp_wait}
+expected_wait_time = function(x, cdf=pnorm){
+  (1-cdf(x))^-1
+}
 xv = seq(0,4,.001)
-plot(test$values, test$next_arrival_wait)
-lines(xv, expected_wait_time(xv), lty=2, col='blue')
+#plot(test$values, test$next_arrival_wait)
+#lines(xv, expected_wait_time(xv), lty=2, col='blue')
 
 plot(test$values, log(test$next_arrival_wait))
 lines(xv, log(expected_wait_time(xv)), lty=2, col='blue')
+```
 
-# 2^n isn't a bad estimate, but it appears to actually grow *faster* than this. Let's improve
-# on this estimate later.
+Looks like our estimator fits the data!
+
+Now let's take a look at the relationship between the expected wait time and the time at which we observed our last max value.
+
+```{r}
+plot(test$arrival_time, test$next_arrival_wait, 
+     col=(1+floor(test$values)),
+     xlab="i",
+     ylab="j|i"
+     )
+```
+
+Yikes. This is a bit more readable in log-log space:
+
+```{r}
+plot(log(test$arrival_time), log(test$next_arrival_wait), 
+     col=(1+floor(test$values)),
+     xlab="log(i)",
+     ylab="log(j|i)"
+     )
+
+```
+
+These plots pretty clearly shows that our expected $j$ is much more accurately estimable given some $m$ than given some $i$, especially as sample size gets large.
+
+# Re-evaluating the growth rate
+
+Earlier, I produced an argument for $2^n$ as a reasonable heuristic for the growth rate of the expected wait time to the next new max value. Let's see how this estimate compares to the experimental data.
+
+```{r}
 xv = 1:20
 plot(test$index[1:length(test$values)], log(test$arrival_time))
 lines(xv, log(2^(xv)), col="blue")
@@ -227,52 +292,43 @@ lines(xv, log(2^(xv-1)), col="red")
 lines(xv, log(xv*2^(xv)), col="green")
 ```
 
-# Re-evaluating the growth rate
-
 From our simulations, it looks like $2^n$ is a reasonably good heuristic for small sample sizes, but the number of samples needed to achieve new max values for large samples seems to grow even faster than this, at least under the normality assumption we used in the simulation.
 
 To improve our estimate, we need to examine the distribution of the max of a given sample. Following the notation defined earlier: $p(x=X_{(n)}) = p(x\ge X_1, x\ge X_2, \ldots x\ge X_n) = F(x)^n$. This distribution is closely related to the Gumbel distribution, which is widely used in extreme value theory: http://stats.stackexchange.com/questions/105745/extreme-value-theory-show-normal-to-gumbel
 
-I don't really have experience with extreme value theory, so I'm probably doing this the hard way. Here we go!
+I don't really have experience with extreme value theory, so I'm going to experiment with $p(x=X_{(n)})$ directly.
 
-Given max(X,n) has CDF F(x)^n, PDF = d/dx CDF = n * F(X)^(n-1) * f(x)
+Given $max(X,n)$ has CDF $F(x)^n$, the PDF is given by $ d/dx CDF = n * F(X)^(n-1) * f(x)$. Therefore, to find the expectation we evaluate the following interval:
 
 $$
 \begin{align}
-  E[x|n] &= \int x pdf dx
+  E[x|n] &= \int x pdf dx \\
   E[x|n] &= \int x *  n * F(X)^(n-1) * f(x)
 \end{align}
 $$
 
-Aaaaand it looks like we're at an impasse here. I tried plugging this into Wolfram Alphaand no beans, and unfortunately I don't think I'm talented enough with calculus to turn this into something meaningful, even with the additional constrant of the normality assumption.
+Aaaaand we're already at an impasse. This integral doesn't just *look* difficult to evaluate: according to wolfram.com, even if we adopt the normality assumption, closed form solutions are only known up to $n=5$: http://mathworld.wolfram.com/GumbelDistribution.html  
 
-In fact, this integral doesn't just *look* difficult: according to wolfram.com, even if we adopt the normality assumption, closed form solutions are only known up to $n=5$. 
-
-Although an analytic solution isn't readily available, we can still use numerical methods to approximate this integral at different values of n to get a numerical estimate for this expectation, and then maybe fit a curve to the result to get an approximation to the analytic solution as a function of n. Although it'll just be an approximation, it may still be very informative of the behavior of this expectation. In particular, I'm interested to see how quickly this grows, since 2^n fails for large n.
+Although an analytic solution isn't readily available, we can still use numerical methods to approximate this integral at different values of $n$ to estimate this expectation, and then maybe fit a curve to the result to get an approximation to the analytic solution as a function of $n$. Although it'll just be an approximation, it may still be very informative of the behavior of this expectation. In particular, I'm interested to see how quickly this grows, since the $2^n$ heuristic fails for large $n$.
 
 ## Method 1. Lazy monte carlo simulation of mean, using tools we already built
 
 We can leverage the simulations we've already performed to get an estimate: for a given observed max we can attribute this value to samples of increasing size up to the appearance
 of the next new max value.
 
-## Method 2. True monte carlo simulation of mean
+## Method 2. Monte carlo simulation of mean
 
 The method above is a bit biased though because we aren't actually generating new samples. To really do this right, we need to draw a new sample of size $n$ each time and evaluate the max value for that sample. Otherwise we're just loading up our data with autocorrelation and bias.
 
-```{r}
+```{r def_max_given_n}
 max_sim_given_n = function(n, reps, fx=rnorm, values=FALSE, mu=TRUE, sigma=TRUE){
-  #vals = rep(NA_real_, reps)
-  #for(i in 1:reps){
-  #  x = fx(n)
-  #  m = max(x)
-  #}
   replicate(reps, max(fx(n)))
 }
 ```
 
 Let's visualize this distribution for a few values of $n$ just to see how it behaves.
 
-```{r}
+```{r plot_max_given_n}
 plot(0,0, 
      type='n', 
      xlim=c(0,5), 
@@ -281,16 +337,18 @@ plot(0,0,
      ylab='p(x=X_(n))', 
      main="Distribution of max(X_(n))\nfor increasing values of n"
      )
-sapply(1:4,function(x) lines(density(max_sim_given_n(10^x, 5e3)), col=x))
+system.time( sapply(1:4,function(x) lines(density(max_sim_given_n(10^x, 5e3)), col=x)) )
 legend('topleft', paste("n=10^", 1:4), lty=1, col=1:4  )
 ```
 
-```{r}
+Now let's run simulations over a full range of $n$ values and visualize the simulated expectation and 95% CI. I'm going to use the median instead of the mean as my simulated expectation to simplify my code a bit. It shouldn't really make much of a difference, but it's worth mentioning since formally monte carlo simulation generally uses the mean.
+
+```{r sim_plot_max_given_n}
 #totx=2e3, reps=2e2 -> 85.63 seconds
 #totx=1e3, reps=2e2 -> 15.29 seconds
 #totx=1e3, resp=1e2 ->  7.8 seconds
 #totx=1e2, reps=1e2 ->  0.14 seconds
-totx = 2e3 
+totx = 1e3 #2e3 
 xv = 1:totx
 system.time(CI <- sapply(xv, function(x) quantile(max_sim_given_n(x, 2e2), c(.025, .5, .975))))
 plot(0,0, type='n', xlab='log(n)', ylab='E[X_(n)]', xlim=c(0,max(log(xv))), ylim=c(0,max(CI)))
@@ -299,23 +357,25 @@ lines(log(xv), CI[1,], col='red', lty=2)
 lines(log(xv), CI[3,], col='red', lty=2)
 ```
 
-Interestingly, the magnitude of the confidence interval appears to converge to around $1.35$ .
+Interestingly, the magnitude of the confidence interval appears to converge to around $1.35$.
 
-```{r}
+```{r plot_ci_width}
 plot(xv, CI[3,]-CI[1,], main="Width of 95% CI for different")
 (inter_ci = mean(CI[3,floor(.75*totx):totx]-CI[1,floor(.75*totx):totx]))
 abline(h = inter_ci, col='blue', lty=2)
 ```
 
+If we look at this in log space, it looks like the magnitude of the CI is still a ways from converging, but it does appear to be converging.
 
-```{r}
+```{r plot_log_ci_width}
 plot(log(xv), CI[3,]-CI[1,])
 ```
 
+This isn't surprising and actually corroborates the one thing I know about extreme value theory: as sample size approaches infinity, the distribution of the max of i.i.d. normals approaches the Gumbel distribution. The convergence of the simulated confidence interval is approaching the 95% CI of the standard Gumbel distribution (the distribution of the max of i.i.d. standard normals). I haven't been playing with the Gumbel distribution more in this experiment because I'm not really interested in the convergence behavior of this statistic: I want to know how it behaves as a function of sample size.
 
 With this estimate (and confidence bounds) on hand, we can now plug this back into our analytic estimate for $E[j|m]$ to get confident bounds on $E[j|i]$ under the normality assumption:
 
-```{r}
+```{r plot_j_given_n_CI}
 j_est = 1/(1-pnorm(CI))
 plot(xv,j_est[2,], type='l',
      xlab="i", 
@@ -330,7 +390,11 @@ plot(0,0,
 lines(xv, j_est[1,], lty=2, col='red')
 lines(xv, j_est[2,])
 lines(xv, j_est[3,], lty=2, col='red')
+```
 
+Yikes! The upper bound of the confidence interval is growing a lot faster than than the expected value of the lower bound. This is clearer if we zoom in a bit.
+
+```{r}
 # Upper bound of CI grows rapidly
 plot(0,0, 
      type='n', 
@@ -342,16 +406,46 @@ plot(0,0,
 lines(xv, j_est[1,], lty=2, col='red')
 lines(xv, j_est[2,])
 lines(xv, j_est[3,], lty=2, col='red')
+```
 
-# The observed convergence in log space is presumably to the standard gumbel distribution
+If we look at this in log space, we can see that the expectation and both bounds of the CI are stabilizing. 
+
+```{r}
 log_j_est = log(1/(1-pnorm(CI)))
 plot(0,0, type='n', xlim=c(0,max(xv)), ylim=c(0,max(log_j_est)), xlab="i", ylab='log(j)')
 lines(xv, log_j_est[1,], lty=2, col='red')
 lines(xv, log_j_est[2,])
 lines(xv, log_j_est[3,], lty=2, col='red')
-
-
 ```
+
+Presumably, this is the simulation converging to the standard Gumbel distribution. but in log-log space it looks like we're still a ways off from converging.
+
+```{r}
+log_j_est = log(1/(1-pnorm(CI)))
+plot(0,0, type='n', xlim=c(0,max(log(xv))), ylim=c(0,max(log_j_est)), xlab="log(i)", ylab='log(j)')
+lines(log(xv), log_j_est[1,], lty=2, col='red')
+lines(log(xv), log_j_est[2,])
+lines(log(xv), log_j_est[3,], lty=2, col='red')
+```
+
+Let's sanity check how well our results capture the behvaior observed in the original simulation.
+
+```{r}
+# overlay with our original simulation
+lim_x = max(log(xv))
+log_arr = log(test$arrival_time)
+plot(log_arr[log_arr<=lim_x], log(test$next_arrival_wait)[log_arr<=lim_x], 
+     #col=(1+floor(test$values)),
+     xlab="log(i)",
+     ylab="log(j|i)",
+     xlim=c(0,lim_x)
+     )
+lines(log(xv), log_j_est[1,], lty=2, col='red')
+lines(log(xv), log_j_est[2,], lty=2, col='blue')
+lines(log(xv), log_j_est[3,], lty=2, col='red')
+```
+
+Looks like an ok fit, but it seems to be shifted up a bit for some reason. I'm not sure exactly how to account for that, but I'm guessing there's some kind of bias introduced by my methodology.
 
 ## Method 3. monte carlo integration of the expectation 
 
@@ -361,7 +455,7 @@ Although this method will probably give us more accurate values for the expectat
 
 ...Honestly, I may just skip this method. Or fuck it, I'll just do it cause why not. 
 
-```{r}
+```{r def_mc_int}
 # I could just use the built in numerical integration function, but what's the fun in that?
 mc_int = function(fx, xrange=c(0,1), ymax=NA, iters=1e6, trace=FALSE){
   xmin = min(xrange); xmax = max(xrange); ymin = 0
