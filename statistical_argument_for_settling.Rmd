@@ -499,6 +499,44 @@ plot(test, type='l')
 plot(log(seq_along(test)), test, type='l')
 ```
 
+Now, why even go to the trouble? We've already got an estimation for this expectation, with confidence bands even, right? Well, although I don't get confidence bands out of this method, notice how much faster it was.
+
+With the above estimate for $m|i$, we can (as earlier) plug it back into our $\frac{1}{1-F(x)}$ estimator to estimate $j|i$.
+
+```{r}
+j_est2 = 1/(1-pnorm(test))
+plot(seq_along(j_est2),j_est2, type='l',
+     xlab="i", 
+     ylab='E[j|i]')
+```
+
+Because I like sanity checks, let's compare the output of the monte carlo integration with the result from the confidence interval simulation to make sure the new results jive with what we've previously seen.
+
+```{r}
+plot(log(seq_along(j_est2)), log(j_est2), type='l',
+     xlab="log(i)", 
+     ylab='log(E[j|i])')
+lines(log(xv), log_j_est[1,], lty=2, col='red')
+lines(log(xv), log_j_est[2,], lty=2, col='blue')
+lines(log(xv), log_j_est[3,], lty=2, col='red')
+```
+
+Looking good! Now, to demonstrate how powerful the monte carlo integration is, let's generate estimates for some really large values of $i$ (i.e. large sample sizes). Doing this via simulation would take prohibitively long, but with the monte carlo integration it's much faster and is really just contingent on how accurate we want to be. 
+
+When we ran the monte carlo integration earlier it looked like we started to lose accuracy for large values of $n$, so I'm going to signficantly boost the number of iterations used for a single numerical integration, which won't really affect the result much because we're only going to run this for a limited number of values anyway.
+
+```{r}
+xv = 10^(1:10)
+system.time(
+  test2 <- sapply(xv, function(n) 
+    mc_int(function(x) exp_integral(x,n), xrange=c(-20,20), iters=1e6)$estimate
+    )
+)
+plot(xv, test2, log="x")
+```
+
+And just like that, in basically no time at all, we have fairly high precision estimates of $E[X_(n)]$ for arbitrarily large values of $n$, which would have taken intractably long to calculate using the methods described earlier.
+
 # The secretary problem
 
 ...
