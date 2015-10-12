@@ -298,16 +298,13 @@ To improve our estimate, we need to examine the distribution of the max of a giv
 
 I don't really have experience with extreme value theory, so I'm going to experiment with $p(x=X_{(n)})$ directly.
 
-Given $max(X,n)$ has CDF $F(x)^n$, the PDF is given by $ d/dx CDF = n * F(X)^(n-1) * f(x)$. Therefore, to find the expectation we evaluate the following interval:
+Given $X_{(n)}$ has CDF $F(x)^n$, the PDF is given by $\frac{d}{dx} CDF = n  F(x)^{n-1}  f(x)$. Therefore, to find the expectation we evaluate the following interval:
 
 $$
-\begin{align}
-  E[x|n] &= \int x pdf dx \\
-  E[x|n] &= \int x *  n * F(X)^(n-1) * f(x)
-\end{align}
+  E[x|n] = \int x  n  F(x)^{n-1}  f(x) dx
 $$
 
-Aaaaand we're already at an impasse. This integral doesn't just *look* difficult to evaluate: according to wolfram.com, even if we adopt the normality assumption, closed form solutions are only known up to $n=5$: http://mathworld.wolfram.com/GumbelDistribution.html  
+Aaaaand we're already at an impasse. This integral doesn't just *look* difficult to evaluate: according to [wolfram](http://mathworld.wolfram.com/GumbelDistribution.html), if we adopt the normality assumption closed form solutions are only known up to $n=5$.
 
 Although an analytic solution isn't readily available, we can still use numerical methods to approximate this integral at different values of $n$ to estimate this expectation, and then maybe fit a curve to the result to get an approximation to the analytic solution as a function of $n$. Although it'll just be an approximation, it may still be very informative of the behavior of this expectation. In particular, I'm interested to see how quickly this grows, since the $2^n$ heuristic fails for large $n$.
 
@@ -445,20 +442,29 @@ lines(log(xv), log_j_est[2,], lty=2, col='blue')
 lines(log(xv), log_j_est[3,], lty=2, col='red')
 ```
 
-Looks like an ok fit, but it seems to be shifted up a bit for some reason. I'm not sure exactly how to account for that, but I'm guessing there's some kind of bias introduced by my methodology.
+Looks like a pretty good fit, but at first glance it seems to be shifted up a bit. I think this isn't a reflection of poor fit, but is instead an artifact of visualizing this in log space.
 
 ## Method 3. monte carlo integration of the expectation 
 
-Method 2 should be completely sufficient, but just for fun since we have that integral, it'll be interesting to numerically approximate the integral itself. Frankly, I think this will actually produce better estimates than either of the above solutions (which is the main reason I'm doing this) but we won't know for sure until after experimentation (because I'm too lazy to  get out pen and paper and estimate the magnitude of my estimated error for these different approaches).
+Method 2 should be completely sufficient, but just for fun since we have that integral, it'll be interesting to numerically approximate the integral itself. This approach won't give us confidence bounds like method 2 did (unless we calculate a separate integral for the confidence bounds) but it will make estimating the expectation for arbitrarily large values of $n$ tractable.
 
-Although this method will probably give us more accurate values for the expectation, we will *not* have confidence bounds for the statistic anymore, which, as we learned above, is extremely important to understanding the behavior of this statistic when $n$ is large.
+### A quick review of monte carlo integration
 
-...Honestly, I may just skip this method. Or fuck it, I'll just do it cause why not. 
+To perform monte carlo integration, we need three things:
+
+1. An interval of integration
+2. A function (the integrand) that we can evaluate everywhere in this range
+3. Upper and lower values that exceed the range of the integrand in the interval of integration
+
+We use the interval of integration and the upper and lower bounds to form a box with known area. The integrand
+slices this box into two peices. A uniformly random point in this box will lie either above or below the integrand (or, technically, directly on the integrand with probability = 0). By repeatedly generating random points, we can estimate the fraction of the bounding box that is under the integrand. Multiplying the area of the box by this fraction gives us the monte carlo estimate for the area under the curve.
+
+
+![Monte Carlo Integration](https://upload.wikimedia.org/wikipedia/commons/8/84/Pi_30K.gif)
 
 ```{r def_mc_int}
-# I could just use the built in numerical integration function, but what's the fun in that?
-mc_int = function(fx, xrange=c(0,1), ymax=NA, iters=1e6, trace=FALSE){
-  xmin = min(xrange); xmax = max(xrange); ymin = 0
+mc_int = function(fx, xrange=c(0,1), ymin = 0, ymax=NA, iters=1e6, trace=FALSE){
+  xmin = min(xrange); xmax = max(xrange)
   if(is.na(ymax)){
     xv = seq(xmin, xmax, length.out=1e4)
     yrange = fx(xv)
@@ -474,6 +480,8 @@ mc_int = function(fx, xrange=c(0,1), ymax=NA, iters=1e6, trace=FALSE){
   outv
 }
 ```
+
+Just to make sure this works, here's a demo for f(x) = 1:
 
 ```{r}
 # MC Integration demo using identity function
