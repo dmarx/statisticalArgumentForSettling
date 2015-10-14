@@ -509,6 +509,12 @@ plot(log(seq_along(test)), test, type='l')
 
 Now, why even go to the trouble? We've already got an estimation for this expectation, with confidence bands even, right? Well, although I don't get confidence bands out of this method, notice how much faster it was.
 
+## Monte carlo integration for the confidence intervals
+
+We can use the same technique to get confidence bands. 
+
+## Sanity checking
+
 With the above estimate for $m|i$, we can (as earlier) plug it back into our $\frac{1}{1-F(x)}$ estimator to estimate $j|i$.
 
 ```{r}
@@ -544,6 +550,55 @@ plot(xv, test2, log="x")
 ```
 
 And just like that, in basically no time at all, we have fairly high precision estimates of $E[X_(n)]$ for arbitrarily large values of $n$, which would have taken intractably long to calculate using the methods described earlier.
+
+
+# Keep it analytical
+
+I had fun coding up these simulations and stuff, but having pieced together bits and pieces of an analytical solution along the way, it looks like we didn't really need to go to all that trouble. 
+
+## Putting it all together
+
+From earlier, we have that the max of an i.i.d. sample of size $n$ with $CDF=F(x)$ is $F(x)^n$. We jumped through a lot of hoops to calculate $E[F(x)^n]$, but it's pretty much trivial to calculate the *median* of this statistic, or any quantile. If we plug the result back into the CDF, we get the probability of observing this quantity given the generating distribution. If we plug the resulting probability into the expected value of the geometric distribution, $\frac{1}{p}$, we get the expected time until we see an observation of at least this magnitude. 
+
+$X_{(n)} \sim CDF = F(x)^n$
+$E[X_{(n)}] \approx F^{-1}_{X_(n)}(.5)$
+$p_n=F(F^{-1}_{X_(n)}(.5))$
+$T_n=\frac{1}{p}=\frac{1}{F(F^{-1}_{X_(n)}(.5))}$
+
+This statistic $T_n$ gives us an approximation to the expected number of observations until we see a new max value, given the number of observations we've already observed.
+
+```{r analytic_solution1}
+xv = seq(-4,4, length.out=1e5)
+test = pnorm(xv)^20
+
+N=1:20
+q=c(.025, .5, .975)
+test = sapply(N, function(n) pnorm(xv)^n)
+CI = apply(test, 2, function(x) sapply(q, function(qi) xv[which.min(qi>x)]))
+plot(0, 0, type='n', xlim=c(min(N), max(N)), ylim=c(min(CI), ylim=max(CI)))
+lines(N, CI[1,], col='red', lty=2)
+lines(N, CI[2,])
+lines(N, CI[3,], col='red', lty=2)
+```
+
+```{r analytic_solution2}
+CI2 = 1/(1-pnorm(CI))
+plot(0, 0, type='n', 
+     xlim=c(min(N), max(N)), 
+     ylim=c( min(CI2), max(CI2) )
+     )
+#plot(c( min(N),   max(N)   ), 
+#     c( min(CI2), max(CI2) ), 
+#     type='n', 
+#     )
+
+lines(N, CI2[1,], col='red', lty=2)
+lines(N, CI2[2,])
+lines(N, CI2[3,], col='red', lty=2)
+```
+
+
+Looks familar, right?
 
 # The secretary problem
 
