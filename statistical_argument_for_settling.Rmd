@@ -560,10 +560,13 @@ I had fun coding up these simulations and stuff, but having pieced together bits
 
 From earlier, we have that the max of an i.i.d. sample of size $n$ with $CDF=F(x)$ is $F(x)^n$. We jumped through a lot of hoops to calculate $E[F(x)^n]$, but it's pretty much trivial to calculate the *median* of this statistic, or any quantile. If we plug the result back into the CDF, we get the probability of observing this quantity given the generating distribution. If we plug the resulting probability into the expected value of the geometric distribution, $\frac{1}{p}$, we get the expected time until we see an observation of at least this magnitude. 
 
-$X_{(n)} \sim CDF = F(x)^n$
-$E[X_{(n)}] \approx F^{-1}_{X_(n)}(.5)$
-$p_n=F(F^{-1}_{X_(n)}(.5))$
-$T_n=\frac{1}{p}=\frac{1}{F(F^{-1}_{X_(n)}(.5))}$
+$$X_{(n)} \sim \frac{d}{dx} F_X(x)^n \text{ s.t. } F_{X_{(n)}} = F_X(x)^n$$
+
+$$E[X_{(n)}] \approx F^{-1}_{X_{(n)}}(.5)$$
+
+$$p_n=F_X \left( F^{-1}_{X_{(n)}}(.5) \right)$$
+
+$$T_n=\frac{1}{p_n}=\frac{1}{F_X \left( F^{-1}_{X_{(n)}}(.5) \right)}$$
 
 This statistic $T_n$ gives us an approximation to the expected number of observations until we see a new max value, given the number of observations we've already observed.
 
@@ -574,23 +577,19 @@ test = pnorm(xv)^20
 N=1:20
 q=c(.025, .5, .975)
 test = sapply(N, function(n) pnorm(xv)^n)
-CI = apply(test, 2, function(x) sapply(q, function(qi) xv[which.min(qi>x)]))
-plot(0, 0, type='n', xlim=c(min(N), max(N)), ylim=c(min(CI), ylim=max(CI)))
-lines(N, CI[1,], col='red', lty=2)
-lines(N, CI[2,])
-lines(N, CI[3,], col='red', lty=2)
+CI_true = apply(test, 2, function(x) sapply(q, function(qi) xv[which.min(qi>x)]))
+plot(0, 0, type='n', xlim=c(min(N), max(N)), ylim=c(min(CI_true), ylim=max(CI_true)))
+lines(N, CI_true[1,], col='red', lty=2)
+lines(N, CI_true[2,])
+lines(N, CI_true[3,], col='red', lty=2)
 ```
 
 ```{r analytic_solution2}
-CI2 = 1/(1-pnorm(CI))
+CI2 = 1/(1-pnorm(CI_true))
 plot(0, 0, type='n', 
      xlim=c(min(N), max(N)), 
      ylim=c( min(CI2), max(CI2) )
      )
-#plot(c( min(N),   max(N)   ), 
-#     c( min(CI2), max(CI2) ), 
-#     type='n', 
-#     )
 
 lines(N, CI2[1,], col='red', lty=2)
 lines(N, CI2[2,])
@@ -598,7 +597,25 @@ lines(N, CI2[3,], col='red', lty=2)
 ```
 
 
-Looks familar, right?
+Looks familar, right? Let's overlay this on top of the simulation.
+
+```{r}
+
+plot(0, 0, type='n', 
+     xlim=c(min(N), max(N)), 
+     ylim=c( min(CI_true), max(CI_true) )
+     )
+
+lines(N, CI_true[1,], col='red', lty=2)
+lines(N, CI_true[2,])
+lines(N, CI_true[3,], col='red', lty=2)
+
+lines(N, CI[2,N], col='blue', lty=2)
+lines(N, CI[1,N], col='blue', lty=2)
+lines(N, CI[3,N], col='blue', lty=2)
+```
+
+Oh baby.
 
 # The secretary problem
 
