@@ -617,6 +617,55 @@ lines(N, CI[3,N], col='blue', lty=2)
 
 Oh baby.
 
+## Simulating the distribution of wait times
+
+```{r}
+sim_wait_to_new_max_give_sample_size = function(n,
+                                                fx=rnorm,
+                                                iters=1e3,
+                                                q=c(0.025, .5, .975),
+                                                values=FALSE){
+  outv=list()
+  outv$estimate = matrix(NA_real_, length(n), length(q)+1) #rep(NA_real_, length(n))
+  if(values) outv$mat = matrix(NA_real_, length(n), iters)
+  for(i in 1:length(n)){
+    sim_i = rep(NA_real_, iters)
+    for(j in 1:iters){
+      x = fx(n[i])
+      m0 = max(x)
+      m1=m0-1
+      k=0
+      while(m0>m1){
+        k=k+1
+        m1=fx(1)
+      }
+      sim_i[j] = k
+    }
+    if(values) outv$mat[i,] = sim_i
+    outv$estimate[i,] = c(mean(sim_i), quantile(sim_i, q))
+  }
+  outv
+}
+```
+
+```{r}
+xv=1:20
+system.time(test <- sim_wait_to_new_max_give_sample_size(xv, iters=5e3, values=TRUE))
+#plot(xv, test$estimate, type='l')
+plot(0, 0, type='n', 
+     xlim=c(min(xv), max(xv)), 
+     ylim=c( min(test$estimate), max(test$estimate[,4]) )
+)
+lines(xv, test$estimate[,1], col='blue')
+lines(xv, test$estimate[,3], lty=2)
+lines(xv, test$estimate[,2], col='red', lty=2)
+lines(xv, test$estimate[,4], col='red', lty=2)
+
+lines(N, 1/(1-pnorm(CI_true[1,])), col='red')
+lines(N, 1/(1-pnorm(CI_true[2,])))
+lines(N, 1/(1-pnorm(CI_true[3,])), col='red')
+```
+
 # The secretary problem
 
 ...
