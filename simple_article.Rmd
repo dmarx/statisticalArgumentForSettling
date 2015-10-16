@@ -107,15 +107,14 @@ $$X_{(n)} \sim \frac{d}{dx} F_X(x)^n \text{ s.t. } F_{X_{(n)}} = F_X(x)^n$$
 
 $$E[X_{(n)}] \approx F^{-1}_{X_{(n)}}(.5)$$
 
-$$p_n=F_X \left( F^{-1}_{X_{(n)}}(.5) \right)$$
+$$p_n =F_X \left( E[X_{(n)}] \right) =      =F_X \left( F^{-1}_{X_{(n)}}(.5) \right)$$
 
-$$T_n=\frac{1}{p_n}=\frac{1}{F_X \left( F^{-1}_{X_{(n)}}(.5) \right)}$$
+$$T_n=\frac{1}{1-p_n}=\frac{1}{1 - F_X \left( F^{-1}_{X_{(n)}}(.5) \right)}$$
 
 This statistic $T_n$ gives us an approximation to the expected number of observations until we see a new max value, given the number of observations we've already observed.
 
 ```{r analytic_solution1}
 xv = seq(-4,4, length.out=1e5)
-test = pnorm(xv)^20
 
 N=1:20
 q=c(.025, .5, .975)
@@ -182,7 +181,7 @@ lines(log(xv_ci), CI[1,], col='red', lty=2)
 lines(log(xv_ci), CI[3,], col='red', lty=2)
 ```
 
-Looks familar, right? Let's plot the analytic solution and the simulation results together to see how they line up.
+Let's plot the analytic solution and the simulation results together to see how they line up.
 
 ```{r}
 
@@ -205,6 +204,31 @@ Oh baby.
 ############################
 
 ## Simulating the distribution of wait times
+
+There is a famous result in probability called *Jensen's inequality*, which states that:
+
+$$g(E[X]) \le E[g(X)]$$
+
+Above, we found $E[j|X_{(n)}]$ such that $j$ is the index of the next max value to exceed the max value observed for the given sample of size $n$, $X_{(n)}$. Furthermore, we demonstrated that we can use the transformation $g(x) = \frac{1}{1-pnorm(x)}$ to find the wait time to the next max value given some previously observed max value.
+
+We can estimate this waiting time by plugging the analytic solution found above into the $g(x)$ transformation:
+
+
+```{r}
+xv=1:20
+yv = 1/(1-pnorm(CI_true))
+plot(0, 0, type='n', 
+     xlim=c(min(xv), max(xv)), 
+     ylim=c(0, max(yv) )
+)
+lines(N, yv[1,], col='red')
+lines(N, yv[2,])
+lines(N, yv[3,], col='red')
+```
+
+But this is really $g(E[X])$, and we want $E[g(X)]$. Jensen's inequality tells us that the estimate we have for $E[T_n]$ is at best a lower bound on the true value. To test how our estimator aligns with what we're looking for, let's run some simulations and see how they line up.
+
+We'll run experiments by building a function that takes some fixed value for $n$, and then for each simulation iteration drawing a sample of size $n$ from an input generating distribution and returning the max value observed in the sample for that iteration. Once all the iterations are complete, we will return statistics on quantiles of interest (especially the median, since I've asserted that that's really what we're interested in) and also the mean, since this is the analytic expectation of the distribution.
 
 ```{r}
 sim_wait_to_new_max_give_sample_size = function(n,
@@ -235,6 +259,8 @@ sim_wait_to_new_max_give_sample_size = function(n,
 }
 ```
 
+Now we can run simulations and overlay them with our previous results to see if our estimator has captured the behavior we're looking for.
+
 ```{r}
 xv=1:20
 system.time(test <- sim_wait_to_new_max_give_sample_size(xv, iters=5e3, values=TRUE))
@@ -253,331 +279,4 @@ lines(N, 1/(1-pnorm(CI_true[2,])))
 lines(N, 1/(1-pnorm(CI_true[3,])), col='red')
 ```
 
-
-# Simulation
-
-## Normality assumption
-
-For the purposes of this problem, I'm going to constrain my attention to the standard normal distribution for the rest of this analysis. This is a pretty big assumption, but I don't think it's completely unreasonable relative to the problem. If there were some way to objectively measure sexual performance, I think it wouldn't be at all surprising if a random sample of people's measures exhibited normality. I am *definitely* ignoring the potential effect of variance on the behavior of the max statistic by specifically assuming the *standard* normal, but maybe I'll investigate the effect of variance more later.
-
-## Building the simulation
-
-To begin with, let's define a function that, for some generating distribution, will generate random samples sequentially and track the value and arrival of new max values as they occur in the sample.
-
-```{r def_main_sim_funcs}
-max_val_sim = function(fx, k=1e4){
-  x_max = 0 #fx(1)
-  # Preallocate storage
-  vals = c(0, rep(NA_real_, k))
-  arrival = c(0, rep(NA_integer_, k))
-  j=1 # This will index into storage vectors
-  X = fx(k)
-  for(i in 1:k){
-    x_new = X[i] 
-    if(x_new>x_max){
-      j = j + 1
-      x_max = x_new
-      vals[j] = x_max
-      arrival[j] = i
-    }
-  }
-  list(values=vals[1:j], time=arrival[1:j])
-}
-```
-
-Now let's wrap this function in another function that will run it repeatedly and return the collected results of all the individual simulations. I don't actually know how many values will be returned by a given simulation, so I'll have to be a little creative with how I capture the results of each experiment.
-
-```{r}
-max_val_monte_carlo = function(fx=rnorm, # generating distibution
-                               reps=2e3, # Number of repeated resample simulations
-                               samples=5e4, # Samples drawn during a given simulation
-                               est_extreme_per_run = 20 # estimate of number of extreme values hit per simulation. Performance parameter. Can basically be any arbitrary value.
-){
-  est_total = est_extreme_per_run*reps # for vector pre-allocation
-  indices           = rep(NA_integer_, est_total)
-  values            = rep(NA_integer_, est_total)
-  arrival_time      = rep(NA_integer_, est_total)
-  pre_arrival_wait  = rep(NA_integer_, est_total)
-  next_arrival_wait = rep(NA_integer_, est_total) # this will end up being 1 shorter than other storage vectors
-  j=0 # to index into storage vectors
-  for(i in 1:reps){
-    sim = max_val_sim(fx, k=samples)
-    m = length(sim$time)
-    # Calculate pre-arrival wait (time since last max observed)
-    sim_paw = c(sim$time[1], sim$time[2:m]-sim$time[1:(m-1)])
-    # Calculate wait to next... This is basically the same as above, just shifted. Probably redundant to even store this.
-    sim_naw = c(sim_paw[2:m], NA)
-    
-    while(j+m > length(arrival_time)){
-      print("growing storage vectors...")
-      indices           = c(indices,          rep(NA_integer_, est_total))
-      values            = c(values,           rep(NA_integer_, est_total))
-      arrival_time      = c(arrival_time,     rep(NA_integer_, est_total))
-      pre_arrival_wait  = c(pre_arrival_wait, rep(NA_integer_, est_total))
-      next_arrival_wait = c(                  rep(NA_integer_, est_total))
-    }
-    
-    # Store outcome of simulation iteration
-    j=j+1
-    j2=j+m-1
-    indices[j:j2]            = seq_along(sim$values)
-    values[j:j2]             = sim$values
-    arrival_time[j:j2]       = sim$time
-    pre_arrival_wait[j:j2]   = sim_paw
-    next_arrival_wait[j:j2]  = sim_naw
-    j=j2
-  }
-  # Flush NAs
-  arrival_time = arrival_time[!is.na(arrival_time)]
-  m = length(arrival_time)
-  indices           = indices[1:m] 
-  values            = values[1:m] 
-  pre_arrival_wait  = pre_arrival_wait[1:m]
-  next_arrival_wait = next_arrival_wait[1:m]
-  
-  # Return
-  list(values=values, arrival_time=arrival_time, pre_arrival_wait=pre_arrival_wait, next_arrival_wait=next_arrival_wait, index=indices)
-}
-```
-
-With all the pieces in place, let's run the simulation.
-
-```{r mc_maxval}
-set.seed(123)
-system.time(test <- max_val_monte_carlo(reps=1e2)) # 100reps->5s, 1e3->50s
-```
-
-Let's start by looking at $E[j|m]$. The following plot is colored based on the log(i) to roughly demonstrate the relationship between E[j|i] and $m$. 
-
-```{r plot_mc_maxval}
-plot(test$values, test$next_arrival_wait, 
-     col=(1+floor(log10(test$arrival_time))),
-     xlab="m",
-     ylab="j|m"
-     )
-```
-
-That's pretty tough to read, but the relationship becomes clearer if we instead visualize the log of $j|m$.
-
-```{r}
-plot(test$values, log(test$next_arrival_wait), 
-     col=(1+floor(log10(test$arrival_time))),
-     xlab="m",
-     ylab="log(j|m)"
-     )
-```
-
-The slight curvature the plot exhibits means that it's actually growing *faster* than exponentially.
-
-To sanity check $E[j|m]=\frac{1}{1-F(m)}$, let's plot it against the simulation results.
-
-```{r plot_mc_maxval_exp_wait}
-expected_wait_time = function(x, cdf=pnorm){
-  (1-cdf(x))^-1
-}
-xv = seq(0,4,.001)
-#plot(test$values, test$next_arrival_wait)
-#lines(xv, expected_wait_time(xv), lty=2, col='blue')
-
-plot(test$values, log(test$next_arrival_wait))
-lines(xv, log(expected_wait_time(xv)), lty=2, col='blue')
-```
-
-Looks like our estimator fits the data!
-
-Now let's take a look at the relationship between the expected wait time and the time at which we observed our last max value.
-
-```{r}
-plot(test$arrival_time, test$next_arrival_wait, 
-     col=(1+floor(test$values)),
-     xlab="i",
-     ylab="j|i"
-     )
-```
-
-Yikes. This is a bit more readable in log-log space:
-
-```{r}
-plot(log(test$arrival_time), log(test$next_arrival_wait), 
-     col=(1+floor(test$values)),
-     xlab="log(i)",
-     ylab="log(j|i)"
-     )
-
-```
-
-These plots pretty clearly shows that our expected $j$ is much more accurately estimable given some $m$ than given some $i$, especially as sample size gets large.
-
-To improve our estimate, we need to examine the distribution of the max of a given sample. Following the notation defined earlier: $p(x=X_{(n)}) = p(x\ge X_1, x\ge X_2, \ldots x\ge X_n) = F(x)^n$. This distribution is closely related to the Gumbel distribution, which is widely used in extreme value theory: http://stats.stackexchange.com/questions/105745/extreme-value-theory-show-normal-to-gumbel
-
-I don't really have experience with extreme value theory, so I'm going to experiment with $p(x=X_{(n)})$ directly.
-
-Given $X_{(n)}$ has CDF $F(x)^n$, the PDF is given by $\frac{d}{dx} CDF = n  F(x)^{n-1}  f(x)$. Therefore, to find the expectation we evaluate the following interval:
-
-$$
-  E[x|n] = \int x  n  F(x)^{n-1}  f(x) dx
-$$
-
-Aaaaand we're already at an impasse. This integral doesn't just *look* difficult to evaluate: according to [wolfram](http://mathworld.wolfram.com/GumbelDistribution.html), if we adopt the normality assumption closed form solutions are only known up to $n=5$.
-
-Although an analytic solution isn't readily available, we can still use numerical methods to approximate this integral at different values of $n$ to estimate this expectation, and then maybe fit a curve to the result to get an approximation to the analytic solution as a function of $n$. Although it'll just be an approximation, it may still be very informative of the behavior of this expectation. In particular, I'm interested to see how quickly this grows, since the $2^n$ heuristic fails for large $n$.
-
-Let's sanity check how well our results capture the behvaior observed in the original simulation.
-
-```{r}
-# overlay with our original simulation
-log_j_est = log(1/(1-pnorm(CI)))
-lim_x = max(log(xv_ci))
-log_arr = log(test$arrival_time)
-plot(log_arr[log_arr<=lim_x], log(test$next_arrival_wait)[log_arr<=lim_x], 
-     #col=(1+floor(test$values)),
-     xlab="log(i)",
-     ylab="log(j|i)",
-     xlim=c(0,lim_x)
-     )
-lines(log(xv_ci), log_j_est[1,], lty=2, col='red')
-lines(log(xv_ci), log_j_est[2,], lty=2, col='blue')
-lines(log(xv_ci), log_j_est[3,], lty=2, col='red')
-```
-
-Looks like a pretty good fit, but at first glance it seems to be shifted up a bit. I think this isn't a reflection of poor fit, but is instead an artifact of visualizing this in log space.
-
-## Method 3. monte carlo integration of the expectation 
-
-Method 2 should be completely sufficient, but just for fun since we have that integral, it'll be interesting to numerically approximate the integral itself. This approach won't give us confidence bounds like method 2 did (unless we calculate a separate integral for the confidence bounds) but it will make estimating the expectation for arbitrarily large values of $n$ tractable.
-
-### A quick review of monte carlo integration
-
-To perform monte carlo integration, we need three things:
-
-1. An interval of integration
-2. A function (the integrand) that we can evaluate everywhere in this range
-3. Upper and lower values that exceed the range of the integrand in the interval of integration
-
-We use the interval of integration and the upper and lower bounds to form a box with known area. The integrand
-slices this box into two peices. A uniformly random point in this box will lie either above or below the integrand (or, technically, directly on the integrand with probability = 0). By repeatedly generating random points, we can estimate the fraction of the bounding box that is under the integrand. Multiplying the area of the box by this fraction gives us the monte carlo estimate for the area under the curve.
-
-
-![Monte Carlo Integration](https://upload.wikimedia.org/wikipedia/commons/8/84/Pi_30K.gif)
-
-```{r def_mc_int}
-mc_int = function(fx, xrange=c(0,1), ymin = 0, ymax=NA, iters=1e6, trace=FALSE){
-  xmin = min(xrange); xmax = max(xrange)
-  if(is.na(ymax)){
-    xv = seq(xmin, xmax, length.out=1e4)
-    yrange = fx(xv)
-    ymax = max(yrange)*1.25
-  } 
-  Ux = runif(iters, xmin, xmax)
-  Uy = runif(iters, ymin, ymax)
-  Y  = fx(Ux)
-  test =  Uy < Y
-  A = (xmax-xmin) * (ymax-ymin)
-  outv = list(estimate = mean(test)*A)
-  if(trace) outv$trace = cumsum(test)*A/seq_along(test)
-  outv
-}
-```
-
-Just to make sure this works, here's a demo for f(x) = 1:
-
-```{r}
-# MC Integration demo using identity function
-plot(mc_int(function(x) 1, ymax=4, trace=TRUE, iters=1e3)$trace, type='l')
-```
-
-With this tool built, now we need to translate the expectation integral as a function, and then we can just run it for different values of $n$.
-
-```{r}
-# x *  n * F(X)^(n-1) * f(x)
-exp_integral = function(x, n){
-  x * n * pnorm(x)^(n-1) * dnorm(x)
-}
-
-# 7s for 1e3 and 5e3
-system.time(
-  test <- sapply(1:1e3, function(n) 
-    mc_int(function(x) exp_integral(x,n), xrange=c(-5,5), iters=5e3)$estimate
-    )
-)
-
-plot(test, type='l')
-plot(log(seq_along(test)), test, type='l')
-```
-
-Now, why even go to the trouble? We've already got an estimation for this expectation, with confidence bands even, right? Well, although I don't get confidence bands out of this method, notice how much faster it was.
-
-## Monte carlo integration for the confidence intervals
-
-We can use the same technique to get confidence bands. 
-
-## Sanity checking
-
-With the above estimate for $m|i$, we can (as earlier) plug it back into our $\frac{1}{1-F(x)}$ estimator to estimate $j|i$.
-
-```{r}
-j_est2 = 1/(1-pnorm(test))
-plot(seq_along(j_est2),j_est2, type='l',
-     xlab="i", 
-     ylab='E[j|i]')
-```
-
-Because I like sanity checks, let's compare the output of the monte carlo integration with the result from the confidence interval simulation to make sure the new results jive with what we've previously seen.
-
-```{r}
-plot(log(seq_along(j_est2)), log(j_est2), type='l',
-     xlab="log(i)", 
-     ylab='log(E[j|i])')
-lines(log(xv_ci), log_j_est[1,], lty=2, col='red')
-lines(log(xv_ci), log_j_est[2,], lty=2, col='blue')
-lines(log(xv_ci), log_j_est[3,], lty=2, col='red')
-```
-
-Looking good! Now, to demonstrate how powerful the monte carlo integration is, let's generate estimates for some really large values of $i$ (i.e. large sample sizes). Doing this via simulation would take prohibitively long, but with the monte carlo integration it's much faster and is really just contingent on how accurate we want to be. 
-
-When we ran the monte carlo integration earlier it looked like we started to lose accuracy for large values of $n$, so I'm going to signficantly boost the number of iterations used for a single numerical integration, which won't really affect the result much because we're only going to run this for a limited number of values anyway.
-
-```{r}
-xv = 10^(1:10)
-system.time(
-  test2 <- sapply(xv, function(n) 
-    mc_int(function(x) exp_integral(x,n), xrange=c(-20,20), iters=1e6)$estimate
-    )
-)
-plot(xv, test2, log="x")
-```
-
-And just like that, in basically no time at all, we have fairly high precision estimates of $E[X_(n)]$ for arbitrarily large values of $n$, which would have taken intractably long to calculate using the methods described earlier.
-
-# Monte Carlo integration of E[j+i|i]
-
-We can leverage a simple property of expectations to modify the above integral to give us the expectation for the arrival time of the next extreme value (max). Concretely, if $g(x)$ is a monotonic transformation:
-
-$$X \sim f(x)$$  
-$$E[g(X)] = \int g(x) f(x) dx$$ 
-
-Therefore, the new integral to evaluate is:
-
-$$E[\frac{1}{1-dnorm(x|n)}] = \int \frac{1}{1-dnorm(x)}  n  F(x)^{n-1}  f(x) dx$$
-
-```{r exp_int2}
-N=1:8
-
-# x *  n * F(X)^(n-1) * f(x)
-exp_integral2 = function(x, n){
-  (1/(1-pnorm(x))) * n * pnorm(x)^(n-1) * dnorm(x)
-}
-
-# 7s for 1e3 and 5e3
-system.time(
-  test2 <- sapply(N, function(n) 
-    mc_int(function(x) exp_integral2(x,n), xrange=c(0,1e2), iters=1e5, ymax=20)$estimate
-    )
-)
-test2
-
-plot(test2, type='l', ylim=c(0,100))
-plot( log(seq_along(test2)), test2, type='l', ylim=c(0,100))
-plot( log(seq_along(test2)), log(test2), type='l', ylim=c(0,100))
-lines(log(seq_along(test2)), log(2^seq_along(test2)), col='red')
-```
+Our estimator works! But it's also worth noting that the simulated mean apears to be larger than the median. In other words, this distribution exhibits significant skew.
