@@ -335,7 +335,45 @@ lines(N, 1/(1-pnorm(CI_true[2,])))
 lines(N, 1/(1-pnorm(CI_true[3,])), col='red')
 ```
 
-Our analytic estimates for the quantiles align very well with the results of the simulation. But, as warned by Jensen's inequality, the simulated expectation for the wait time is actually larger than our naive transformation predicted. So, how do we find the expectation for the transformed random variable?
+Our analytic estimates for the quantiles align very well with the results of the simulation. But, as warned by Jensen's inequality, the simulated expectation for the wait time is actually larger than our naive transformation predicted.
+
+# Loosening constraints
+
+We've gotten pretty far exploring the distribution of wait times to the next new max given some sample size. But, as I mentioned earlier: in the context of the motivating problem, we're exploring an unreasonable constraint. Now I want to try to model the wait time to the next observation that is within some upper quantile: say, the top 25% or top 10 observations. Something like that. We were able to learn a lot about the problem by constraining our attention: now we'll learn more by increasing generality.
+
+# Distribution of the upper quantile
+
+We can use the same strategy for finding the distribution of the max value to develop a closed form for the distribution of a quantile.
+
+Recall how we obtained the CDF for $X_{(n)}$:
+
+$$
+\begin{align}
+  P(X_{(n)} \le x) &= P(X_1 \le x, X_2 \le x, \ldots X_n \le x) \\
+                   &= \prod_{i=1}^n P(X_i \le x) \\
+                   &= \prod_{i=1}^n F(x) \\
+                   &= F(x)^n
+\end{align}
+$$ 
+
+Now let's say we want to find the probability that some value $x$ is among the top $j$ observations, such that $X_{(n-j)} \le x$. 
+
+$$
+\begin{align}
+  P(X_{(n-j)} \le x) &= sum_{i=n-j}^n choose(n,i) F(x)^i (1-F(x))^n-i
+\end{align}
+$$
+
+Observe that the distribution of the max we found earlier, $P(X_{(n)} \le x) = F(x)^n$, is just a special case of this function where $j=0$.
+
+The above quantity is actually the right tail of a binomial pmf with $p=F(x)$: i.e. this is expressible via the binomial survival function:
+
+$$P(X_{(n-j)} \le x) = 1-pbinom(j, n, F(x))$$
+
+
+
+###################
 
 # Expectations of transformed random variables
 
+So, how do we find the expectation for the transformed random variable?
