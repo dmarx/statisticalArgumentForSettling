@@ -9,7 +9,13 @@ output: html_document
 
 The other day I found a post in an online relationship forum in which the author had stumbled across a text conversation between his fiancee and one of her girlfriends he wasn't meant to see. In the conversation, she belittled his sexual performance and talked up her ex. The author of the post was reasonably distressed, but more than feeling disrespected, he insisted that it was extremely important to him to know that he was **the best lover she'd ever had**. 
 
-Now personally, I don't think that's a fair standard, and I started thinking about how I could construct a statistical argument to demonstrate this. I respect that there is definitely a huge psychological component here, but for the purposes of the thought experiment: let's focus on the math.
+This isn't a unique event. Actually, seen several similar posts where people are equally distressed by learning that they weren't necessarily the best sex their partner had ever had, and considered ending the relationship over that information. here's another one:
+
+* https://www.reddit.com/r/sex/comments/4288uq/jealousy_my_girlfriend_said_the_hottest_sex_she/
+* https://www.reddit.com/r/sex/comments/3nwvem/my_fiance_was_talking_about_her_exs_penis_with/
+* https://www.reddit.com/r/relationships/comments/3pdys7/update_my26m_fiance26f_was_talking_about_her_exs/
+
+Now personally, I don't think that's a fair standard, both socially and mathematically. I started thinking about how I could construct a statistical argument to demonstrate this. I respect that there is definitely an important psychological component at play here, but for the purposes of the thought experiment: let's focus on the math.
 
 # Formalizing the question
 
@@ -27,7 +33,7 @@ Find the quantity $E[j|n]$ such that $p(j|n) = p(X_{n+j} \ge X_{(n)} )$
 
 # The distribution of $X_{(n)}$
 
-The max value of a sample is less than or equal to all observations. Therefore, we can take product of the CDF of the generating distribution to get the CDF for the distribution of X_{(n)}.
+The max value of a sample is greater than or equal to all observations. Therefore, we can take product of the CDF of the generating distribution to get the CDF for the distribution of X_{(n)}.
 Following the notation defined earlier: 
 
 $$
@@ -49,7 +55,7 @@ P(x = X_{(n)}) &= \frac{d}{dx} P(X_{(n)} \le x)  \\
 \end{align}
 $$
 
-As the size of our sample ($n$) grows, the value taken by $X_{(n)}$ is expected to grow as well. Let's visualize this behavior by plotting the PDF for several values of $n$.
+As the size of our sample ($n$) grows, the value taken by $X_{(n)}$ is expected to grow as well. Let's visualize this behavior by plotting the PDF for several values of $n$ (assuming $X$ is normally distributed).
 
 ```{r, echo=FALSE}
 fn = function(x,n) n * pnorm(x)^(n-1) * dnorm(x)
@@ -67,9 +73,9 @@ dummy = sapply(1:5, function(x) lines(xv, fn(xv,10^x), col=x))
 legend('topleft',paste0('n=1e',1:5), lty=1, col=1:5)
 ```
 
-Observe that $X_{(n)}$ grows very slowly as we increase $n$: each new value of $n$ in the above plot is a full order of magnitude larger than the previous series.
+Observe that $X_{(n)}$ grows very slowly as we increase $n$: each new series in the above plot uses an $n$ a full order of magnitude larger than the previous series.
 
-Because $X_{(n)}$ is itself a random variable, it will simplify our problem a bit if we proceed by assuming we have observed the a value of $X_{(n)}|n$, i.e. considering fixed values for the max instead of the distribution of the max given the size of the sample. We'll come back to this problem formulation later, but let's work up to that by considering this simplified version of the problem first: we are interested in finding the exected wait time until we observe a value greater than the previously observed max value, given a concrete score associated with each observation.
+Because $X_{(n)}$ is itself a random variable, it will simplify our problem a bit if we proceed by assuming we have observed the concrete value (score) taken by $X_{(n)}|n$, i.e. considering fixed values for the max instead of the distribution of the max given the size of the sample. We'll come back to this problem formulation later, but let's work up to that by considering this simplified version of the problem first: we are interested in finding the exected wait time until we observe a value greater than the previously observed max value, given a concrete score associated with each observation.
 
 The new problem formulation is: find the quantity $E[k|m]$ such that $p(k|m) = p(X_{n+k} \ge X_{(n)}| m=X_{(n)} , X_{(i)} \le X_{(n)} \forall (i\in {0:k-1}))$
 
